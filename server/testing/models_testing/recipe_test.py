@@ -2,10 +2,10 @@ import pytest
 from sqlalchemy.exc import IntegrityError
 
 from app import app
-from models import db, Recipe
+from models import db, Recipe, User
 
 class TestRecipe:
-    '''User in models.py'''
+    '''Recipe in models.py'''
 
     def test_has_attributes(self):
         '''has attributes title, instructions, and minutes_to_complete.'''
@@ -13,6 +13,13 @@ class TestRecipe:
         with app.app_context():
 
             Recipe.query.delete()
+            User.query.delete()
+            db.session.commit()
+
+            # Create a user first
+            user = User(username="test_user")
+            user.password_hash = "password123"
+            db.session.add(user)
             db.session.commit()
 
             recipe = Recipe(
@@ -26,6 +33,7 @@ class TestRecipe:
                         """ smallness northward situation few her certainty""" + \
                         """ something.""",
                     minutes_to_complete=60,
+                    user_id=user.id  # Associate with the user
                     )
 
             db.session.add(recipe)
@@ -50,25 +58,74 @@ class TestRecipe:
         with app.app_context():
 
             Recipe.query.delete()
+            User.query.delete()
             db.session.commit()
 
-            recipe = Recipe()
+            # Create a user first
+            user = User(username="test_user2")
+            user.password_hash = "password123"
+            db.session.add(user)
+            db.session.commit()
+
+            # Create a recipe with valid instructions (over 50 chars) but no title
+            recipe = Recipe(
+                instructions="This is a very long instruction that is definitely more than fifty characters long to pass validation.",
+                minutes_to_complete=30,
+                user_id=user.id
+                # title is intentionally omitted
+            )
             
-            with pytest.raises(IntegrityError):
+            # We expect either an IntegrityError from the database or a ValueError from our validation
+            with pytest.raises((IntegrityError, ValueError)):
                 db.session.add(recipe)
                 db.session.commit()
 
-    def test_requires_50_plus_char_instructions(self):
+    def test_requires_instructions_length(self):
+        '''requires instructions to be at least 50 characters long.'''
+        
         with app.app_context():
 
             Recipe.query.delete()
+            User.query.delete()
             db.session.commit()
 
-            '''must raise either a sqlalchemy.exc.IntegrityError with constraints or a custom validation ValueError'''
-            with pytest.raises( (IntegrityError, ValueError) ):
+            # Create a user first
+            user = User(username="test_user3")
+            user.password_hash = "password123"
+            db.session.add(user)
+            db.session.commit()
+
+            # Try to create a recipe with short instructions
+            with pytest.raises((IntegrityError, ValueError)):
                 recipe = Recipe(
                     title="Generic Ham",
-                    instructions="idk lol")
+                    instructions="idk lol",  # Too short - less than 50 chars
+                    user_id=user.id
+                )
                 db.session.add(recipe)
                 db.session.commit()
 
+    def test_requires_instructions_present(self):
+        '''requires instructions to be present.'''
+        
+        with app.app_context():
+
+            Recipe.query.delete()
+            User.query.delete()
+            db.session.commit()
+
+            # Create a user first
+            user = User(username="test_user4")
+            user.password_hash = "password123"
+            db.session.add(user)
+            db.session.commit()
+
+            # Try to create a recipe with no instructions
+            with pytest.raises((IntegrityError, ValueError)):
+                recipe = Recipe(
+                    title="Generic Ham",
+                    instructions="",  # Empty instructions
+                    user_id=user.id
+                )
+                db.session.add(recipe)
+                db.session.commit()
